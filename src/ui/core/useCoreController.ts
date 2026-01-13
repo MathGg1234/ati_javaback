@@ -1,168 +1,176 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import { useEffect, useRef, useState } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 
+import { createMap } from "../../infra/maplibre/mapFactory";
 import { BASEMAPS, type BasemapId } from "../../domain/config/basemaps";
 import { AMBERIEU_EN_BUGEY, LYON } from "../../domain/config/constants";
 
-import { PointCarteRepoImpl } from "../../infra/backend/pointCarteRepo";
+import { createPointCarteStore, type PointCarteRenderStore } from "../../infra/maplibre/pointCarteRenderer";
 import { loadInitialPointCartes } from "../../usecases/loadInitialPointCartes";
-import { createLayerManager } from "../../infra/maplibre/layerManager";
-import { renderRoute } from "../../infra/maplibre/routeRenderer";
-import { fetchGraphHopperRoute } from "../../infra/routing/graphhopperClient";
-import type { PointCarteRendererCtx } from "../../infra/maplibre/pointCarteRenderer";
-import { makePointCarteRendererCtx } from "../../infra/maplibre/pointCarteRenderer";
 
-export type UseCoreControllerArgs = {
-  token: string;
-  /** Ouvre la modale "point OTAN" (clic droit) */
-  openPointModal: (p: [number, number]) => void;
+import { computeSingleRoute } from "../../infra/routing/graphhopper";
+import { renderRoute } from "../../infra/maplibre/routeRenderer";
+import type { LngLat } from "../../domain/routing/types";
+
+type RouteMetrics = { distanceM: number; durationS: number };
+
+export type CoreController = {
+    mapRef: React.MutableRefObject<MapLibreMap | null>;
+    map: MapLibreMap | null; // ✅ IMPORTANT: state pour déclencher re-render
+    basemapId: BasemapId;
+    setBasemapId: (id: BasemapId) => void;
+
+    pointCount: number;
+
+    route?: RouteMetrics;
+    routeCoords: LngLat[];
+
+    convoiPosRef: React.MutableRefObject<LngLat>;
 };
 
-export function useCoreController({ token, openPointModal }: UseCoreControllerArgs) {
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<MapLibreMap | null>(null);
+export function useCoreController(
+    containerRef: React.RefObject<HTMLDivElement | null>,
+    token?: string
+): CoreController {
+    const mapRef = useRef<MapLibreMap | null>(null);
 
-  const [basemapId, setBasemapId] = useState<BasemapId>("osm");
-  const [routeLine, setRouteLine] = useState<[number, number][]>([]);
+    // ✅ ajout d'un state : quand la map est créée, le composant re-render
+    const [map, setMap] = useState<MapLibreMap | null>(null);
 
-  // Position convoi (ref, comme dans LeafletPrime)
-  const convoiPosRef = useRef<[number, number]>(LYON);
+    const [basemapId, setBasemapId] = useState<BasemapId>("osm");
+    const [pointCount, setPointCount] = useState(0);
 
-  const pointCarteRepo = useMemo(() => new PointCarteRepoImpl(), []);
-  const layerManagerRef = useRef<ReturnType<typeof createLayerManager> | null>(null);
+    const [route, setRoute] = useState<RouteMetrics | undefined>(undefined);
+    const [routeCoords, setRouteCoords] = useState<LngLat[]>([]);
 
-  // ✅ Renderer ctx pour gérer les markers (remove/replace)
-  const pointCtxRef = useRef<PointCarteRendererCtx>(makePointCarteRendererCtx());
+    // Position convoi
+    const convoiPosRef = useRef<LngLat>(LYON);
 
-  // openRef : évite stale closure
-  const openRef = useRef(openPointModal);
-  useEffect(() => {
-    openRef.current = openPointModal;
-  }, [openPointModal]);
+    const storeRef = useRef<PointCarteRenderStore>(createPointCarteStore());
 
-  const ensureRoute = async (map: MapLibreMap) => {
-    // Route Lyon -> Ambérieu (GraphHopper)
-    const gh = await fetchGraphHopperRoute(LYON, AMBERIEU_EN_BUGEY);
+    // init map une fois
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        if (mapRef.current) return;
 
-      renderRoute(map, gh.geojson);
+        const lat = LYON[1];
+        const lng = LYON[0];
 
-    const feature = gh.geojson.features?.[0];
-    if (feature?.geometry?.type === "LineString" && Array.isArray(feature.geometry.coordinates)) {
-      const line = feature.geometry.coordinates as [number, number][];
-      setRouteLine(line);
-      // On positionne le convoi au départ si jamais
-      if (line.length) convoiPosRef.current = line[0];
-    }
-  };
+        const createdMap = createMap({
+            container,
+            style: BASEMAPS[basemapId].style,
+            center: LYON,
+            zoom: 9,
+            maxBounds: [
+                [lng - 0.64, lat - 0.45],
+                [lng + 0.64, lat + 0.45],
+            ],
+        });
 
-  const switchBasemap = (next: BasemapId) => {
-    const map = mapRef.current;
-    setBasemapId(next);
-    if (!map) return;
-    map.setStyle(BASEMAPS[next].style);
-  };
+        mapRef.current = createdMap;
+        setMap(createdMap); // ✅ déclenche un re-render => Convoi reçoit enfin la map
 
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-    if (mapRef.current) return;
+        const onLoad = async () => {
+            if (!token) return;
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: BASEMAPS[basemapId].style,
-      center: LYON,
-      zoom: 9,
-    });
+            try {
+                const count = await loadInitialPointCartes(createdMap, storeRef.current, token);
+                setPointCount(count);
+            } catch (e) {
+                console.error("loadInitialPointCartes:", e);
+            }
 
-    mapRef.current = map;
-    layerManagerRef.current = createLayerManager(map);
+            // Itinéraire
+            try {
+                const r = await computeSingleRoute({ start: LYON, end: AMBERIEU_EN_BUGEY, avoids: [], vias: [] });
+                if (r) {
+                    renderRoute(createdMap, r.geojson);
+                    setRoute({ distanceM: r.distance, durationS: r.duration });
+                    setRouteCoords(r.coordinates);
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+                    // Optionnel : positionner le convoi au début de la route
+                    if (r.coordinates.length > 0) convoiPosRef.current = r.coordinates[0];
+                }
+            } catch (e) {
+                console.error("computeSingleRoute:", e);
+            }
+        };
 
-    const preventCtxMenu = (e: MouseEvent) => e.preventDefault();
+        createdMap.on("load", onLoad);
 
-    const _toggleModal = (e: maplibregl.MapMouseEvent) => {
-      const p: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      openRef.current(p);
+        return () => {
+            try {
+                createdMap.off("load", onLoad);
+            } catch {}
+            try {
+                createdMap.remove();
+            } catch {}
+            mapRef.current = null;
+            setMap(null);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [containerRef]);
+
+    // switch basemap
+    useEffect(() => {
+        const m = mapRef.current;
+        if (!m) return;
+
+        const onStyleLoad = async () => {
+            if (!token) return;
+
+            try {
+                const count = await loadInitialPointCartes(m, storeRef.current, token);
+                setPointCount(count);
+            } catch (e) {
+                console.error("loadInitialPointCartes (after setStyle):", e);
+            }
+
+            try {
+                const r = await computeSingleRoute({ start: LYON, end: AMBERIEU_EN_BUGEY, avoids: [], vias: [] });
+                if (r) {
+                    renderRoute(m, r.geojson);
+                    setRoute({ distanceM: r.distance, durationS: r.duration });
+                    setRouteCoords(r.coordinates);
+                }
+            } catch (e) {
+                console.error("computeSingleRoute (after setStyle):", e);
+            }
+        };
+
+        m.once("style.load", onStyleLoad);
+        m.setStyle(BASEMAPS[basemapId].style);
+
+        return () => {
+            try {
+                m.off("style.load", onStyleLoad);
+            } catch {}
+        };
+    }, [basemapId, token]);
+
+    // re-load points si token arrive après coup
+    useEffect(() => {
+        const m = mapRef.current;
+        if (!m) return;
+        if (!token) return;
+
+        if (m.loaded()) {
+            loadInitialPointCartes(m, storeRef.current, token)
+                .then((count) => setPointCount(count))
+                .catch((e) => console.error("loadInitialPointCartes (token effect):", e));
+        }
+    }, [token]);
+
+    return {
+        mapRef,
+        map,
+        basemapId,
+        setBasemapId,
+        pointCount,
+        route,
+        routeCoords,
+        convoiPosRef,
     };
-
-    const onContextMenu = (e: maplibregl.MapMouseEvent) => _toggleModal(e);
-
-    const onLoad = async () => {
-      // Marqueurs fixes
-      new maplibregl.Marker({ color: "#2563eb" })
-        .setLngLat(LYON)
-        .setPopup(new maplibregl.Popup().setText("Lyon"))
-        .addTo(map);
-
-      new maplibregl.Marker({ color: "#16a34a" })
-        .setLngLat(AMBERIEU_EN_BUGEY)
-        .setPopup(new maplibregl.Popup().setText("Ambérieu-en-Bugey"))
-        .addTo(map);
-
-      // Route + convoi
-      await ensureRoute(map);
-
-      // Points BD
-      try {
-        await loadInitialPointCartes(map, pointCarteRepo, token, pointCtxRef.current);
-      } catch (e) {
-        console.error("loadInitialPointCartes:", e);
-      }
-
-      map.getCanvas().addEventListener("contextmenu", preventCtxMenu);
-      map.on("contextmenu", onContextMenu);
-    };
-
-    const onStyleLoad = async () => {
-      // Important : recréer les couches custom après setStyle
-      layerManagerRef.current = createLayerManager(map);
-
-      try {
-        await ensureRoute(map);
-      } catch (e) {
-        console.error("ensureRoute (style.load):", e);
-      }
-
-      try {
-        await loadInitialPointCartes(map, pointCarteRepo, token, pointCtxRef.current);
-      } catch (e) {
-        console.error("loadInitialPointCartes (style.load):", e);
-      }
-    };
-
-    map.on("load", onLoad);
-    map.on("style.load", onStyleLoad);
-
-    return () => {
-      try {
-        map.getCanvas().removeEventListener("contextmenu", preventCtxMenu);
-      } catch {}
-      try {
-        map.off("contextmenu", onContextMenu);
-      } catch {}
-      try {
-        map.off("load", onLoad);
-      } catch {}
-      try {
-        map.off("style.load", onStyleLoad);
-      } catch {}
-      try {
-        map.remove();
-      } catch {}
-      mapRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return {
-    mapContainerRef,
-    mapRef,
-    basemapId,
-    switchBasemap,
-    routeLine,
-    convoiPosRef,
-    pointCtxRef,
-    pointCarteRepo,
-  };
 }

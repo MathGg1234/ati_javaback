@@ -1,124 +1,118 @@
-import React, { useEffect, useRef } from "react";
-
-import "maplibre-gl/dist/maplibre-gl.css";
-import "../../map/AddAvoidPoint/AddAvoidPoint.css";
-import "./CoreApp.css";
-
-import Convoi from "../../map/Convoi/Convoi";
-
-import { BASEMAPS, type BasemapId } from "../../domain/config/basemaps";
-import { fmtKm, fmtMin } from "../../domain/geo/format";
-import type { LngLat } from "../../domain/geo/types";
-
-import { useAddAvoidPoint, type ModalPointPayload } from "../../map/AddAvoidPoint/AddAvoidPoint";
+import { useRef, useState } from "react";
+import { MapCanvas } from "./components/MapCanvas";
 import { useCoreController } from "./useCoreController";
+import { BASEMAPS, type BasemapId } from "../../domain/config/basemaps";
+import Convoi from "./components/Convoi";
+import { useConvoiSync } from "./hooks/useConvoiSync";
+import type { LngLat } from "../../domain/routing/types";
 
-type CoreAppProps = {
-  token: string;
-  userLabel?: string;
-  onLogout?: () => void;
-};
+export function CoreApp({ token, userLabel, onLogout }: any) {
+    const mapContainerRef = useRef<HTMLDivElement | null>(null);
 
-export const CoreApp: React.FC<CoreAppProps> = ({ token, userLabel, onLogout }) => {
-  // Modal (copiée du fonctionnement LeafletPrime)
-  const onSubmitRef = useRef<(payload: ModalPointPayload) => void>(() => {});
+    const { map, basemapId, setBasemapId, pointCount, route, routeCoords, convoiPosRef } =
+        useCoreController(mapContainerRef, token);
 
-  const { open, Modal: PointModal } = useAddAvoidPoint({
-    onSubmit: (payload) => onSubmitRef.current(payload),
-  });
+    const [isDriver, setIsDriver] = useState(false);
 
-  const openRef = useRef(open);
-  useEffect(() => {
-    openRef.current = open;
-  }, [open]);
+    // ✅ position réactive (pour suiveurs)
+    const [remotePos, setRemotePos] = useState<LngLat | null>(null);
 
-  const {
-    mapContainerRef,
-    mapRef,
-    basemapId,
-    setBasemapId,
-    switchBasemap,
-    routeLine,
-    convoiPosRef,
-    metrics,
-    bindModalSubmit,
-  } = useCoreController({
-    token,
-    openPointModal: (p: LngLat) => openRef.current(p),
-  });
+    // ✅ UN SEUL hook (avec callback)
+    useConvoiSync({
+        token,
+        isDriver,
+        convoiPosRef,
+        onRemotePos: (p) => setRemotePos(p),
+    });
 
-  // branche le submit "réel" (création point + rendu)
-  useEffect(() => {
-    onSubmitRef.current = bindModalSubmit;
-  }, [bindModalSubmit]);
+    const fmtKm = (m: number) => `${(m / 1000).toFixed(1)} km`;
+    const fmtMin = (s: number) => `${Math.round(s / 60)} min`;
 
-  return (
-    <div className="core-root">
-      {PointModal}
+    return (
+        <div style={{ height: "100dvh", width: "100%", overflow: "hidden", position: "relative" }}>
+            <MapCanvas containerRef={mapContainerRef} />
 
-      <div ref={mapContainerRef} className="map-container" />
+            <Convoi
+                map={map}
+                route={routeCoords}
+                speed={isDriver ? 10 : 0}
+                name={isDriver ? "Convoi (Pilote)" : "Convoi"}
+                posRef={convoiPosRef}
+                pos={remotePos} // ✅ suiveur: drive le marker via pos
+            />
 
-      {mapRef.current && routeLine.length > 0 && (
-        <Convoi
-          map={mapRef.current}
-          route={routeLine}
-          speed={20}
-          name="Convoi principal"
-          posRef={convoiPosRef}
-          onPositionUpdate={() => {
-            /* plus tard: sync DB / reroute */
-          }}
-        />
-      )}
+            <div
+                style={{
+                    position: "absolute",
+                    zIndex: 10,
+                    top: 12,
+                    left: 12,
+                    width: 360,
+                    background: "#111827",
+                    color: "white",
+                    padding: 12,
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: 10,
+                }}
+            >
+                {(userLabel || onLogout) && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div style={{ lineHeight: 1.2 }}>
+                            {userLabel && (
+                                <div>
+                                    Connecté : <b>{userLabel}</b>
+                                </div>
+                            )}
+                        </div>
+                        {onLogout && (
+                            <button onClick={onLogout} style={{ padding: "6px 10px" }}>
+                                Déconnexion
+                            </button>
+                        )}
+                    </div>
+                )}
 
-      <div className="hud">
-        {(userLabel || onLogout) && (
-          <div className="hud-session">
-            {userLabel && (
-              <div className="hud-session-line">
-                Connecté : <b>{userLabel}</b>
-              </div>
-            )}
-            {onLogout && (
-              <button className="hud-logout" onClick={onLogout}>
-                Déconnexion
-              </button>
-            )}
-          </div>
-        )}
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                    <input type="checkbox" checked={isDriver} onChange={(e) => setIsDriver(e.target.checked)} />
+                    Piloter le convoi (ce navigateur envoie la position)
+                </label>
 
-        <div className="hud-title">Itinéraire (Lyon → Ambérieu-en-Bugey)</div>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    Astuce : ouvre un 2ème onglet en <b>non-pilote</b>, il suivra la position stockée en backend.
+                </div>
 
-        <div className="hud-sub">
-          🔴 Route : {fmtKm(metrics?.distance)} • {fmtMin(metrics?.duration)}
+                <div>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Fond de carte</div>
+                    <select
+                        value={basemapId}
+                        onChange={(e) => setBasemapId(e.target.value as BasemapId)}
+                        style={{ width: "100%", padding: 8 }}
+                    >
+                        {Object.entries(BASEMAPS).map(([id, v]) => (
+                            <option key={id} value={id}>
+                                {v.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                <div style={{ fontSize: 13 }}>
+                    Points carte (backend Java) : <b>{pointCount}</b>
+                </div>
+
+                {route && (
+                    <div style={{ fontSize: 13 }}>
+                        Itinéraire : <b>{fmtKm(route.distanceM)}</b> • <b>{fmtMin(route.durationS)}</b>
+                    </div>
+                )}
+
+                {!token && (
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                        Token manquant : impossible de sync (convoi + points).
+                    </div>
+                )}
+            </div>
         </div>
-
-        <div className="hud-section">
-          <div className="hud-section-title">Fond de carte</div>
-          <select
-            className="hud-select"
-            value={basemapId}
-            onChange={(e) => {
-              const next = e.target.value as BasemapId;
-              setBasemapId(next);
-              switchBasemap(next);
-            }}
-          >
-            {Object.entries(BASEMAPS).map(([id, v]) => (
-              <option key={id} value={id}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="hud-section">
-          <div className="hud-section-title">Ajout de points</div>
-          <div className="hud-sub">Clic droit sur la carte → ouvre la modal OTAN</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default CoreApp;
+    );
+}
