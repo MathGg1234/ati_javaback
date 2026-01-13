@@ -1,20 +1,21 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-
-import type { PointCarteRepo } from "../infra/backend/pointCarteRepo";
-import type { PointCarteRendererCtx } from "../infra/maplibre/pointCarteRenderer";
-import { renderPointCarte } from "../infra/maplibre/pointCarteRenderer";
+import { fetchPointCartes } from "../infra/backend/pointCarteRepo";
+import {
+    clearAllPointCartes,
+    renderPointCarte,
+    type PointCarteRenderStore,
+} from "../infra/maplibre/pointCarteRenderer";
 
 export async function loadInitialPointCartes(
-  map: MapLibreMap,
-  pointCarteRepo: PointCarteRepo,
-  token: string,
-  ctx: PointCarteRendererCtx
-) {
-  const points = await pointCarteRepo.fetchPointCartes(token);
+    map: MapLibreMap,
+    store: PointCarteRenderStore,
+    token: string
+): Promise<number> {
+    const points = await fetchPointCartes(token);
 
-  // reset markers
-  ctx.markersById.forEach((m) => m.remove());
-  ctx.markersById.clear();
+    clearAllPointCartes(store);
 
-  points.forEach((p) => renderPointCarte(ctx, map, p));
+    for (const p of points) renderPointCarte(map, store, p);
+
+    return store.markersById.size;
 }
