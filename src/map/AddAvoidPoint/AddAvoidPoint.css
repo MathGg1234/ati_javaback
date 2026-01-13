@@ -1,0 +1,396 @@
+:root {
+    --fmp-bg: #0b1220;
+    --fmp-border: rgba(255, 255, 255, 0.12);
+    --fmp-muted: rgba(255, 255, 255, 0.82);
+    --fmp-soft: rgba(255, 255, 255, 0.06);
+    --fmp-soft2: rgba(255, 255, 255, 0.04);
+    --fmp-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+
+    --fmp-primary: #2563eb;
+    --fmp-primaryGlow: rgba(37, 99, 235, 0.25);
+
+    --fmp-accent: rgba(250, 204, 21, 0.95);
+    --fmp-accentGlow: rgba(250, 204, 21, 0.18);
+
+    --tileSize: 88px; /* ✅ taille uniforme des boutons icônes/symboles */
+    --gap: 12px;
+}
+
+/* Overlay */
+.fmp-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+/* Modal */
+.fmp-modal {
+    width: 640px;
+    max-width: 94vw;
+    background: var(--fmp-bg);
+    color: white;
+    border-radius: 16px;
+    border: 1px solid var(--fmp-border);
+    box-shadow: var(--fmp-shadow);
+    padding: 16px;
+}
+
+/* Topbar */
+.fmp-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 10px;
+}
+
+.fmp-topbar-title {
+    font-weight: 900;
+    font-size: 16px;
+}
+
+.fmp-close {
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--fmp-muted);
+    font-size: 18px;
+    line-height: 1;
+}
+
+.fmp-position {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-bottom: 12px;
+}
+
+.fmp-step {
+    display: grid;
+    gap: 12px;
+}
+
+/* Panels STEP 1 */
+.fmp-panel {
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px;
+    background: rgba(0,0,0,0.18);
+    padding: 12px;
+}
+
+.fmp-panel--alt {
+    background: rgba(255,255,255,0.03);
+}
+
+.fmp-panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.fmp-panel-title {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.2px;
+}
+
+.fmp-panel-subtitle {
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.fmp-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 999px;
+    margin: 2px 4px;
+}
+
+/* Grids (5 colonnes si possible) */
+.fmp-grid {
+    display: grid;
+    gap: var(--gap);
+    align-items: start;
+    justify-items: center; /* ✅ alignement parfait */
+}
+
+.fmp-grid--5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+    :root { --tileSize: 80px; }
+    .fmp-grid--5 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+    :root { --tileSize: 76px; }
+    .fmp-grid--5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Tiles (catégories + symboles) */
+.fmp-tile {
+    width: var(--tileSize);
+    aspect-ratio: 1 / 1; /* ✅ hauteur = largeur */
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.20);
+    color: white;
+
+    display: grid;
+    grid-template-rows: 1fr auto;
+    place-items: center; /* ✅ icône centrée */
+    padding: 10px;
+    cursor: pointer;
+
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.fmp-tile:hover {
+    border-color: rgba(255,255,255,0.22);
+    transform: translateY(-1px);
+}
+
+.fmp-tile:active {
+    transform: translateY(0px);
+}
+
+.fmp-tile-glyph {
+    font-size: 26px;
+    line-height: 1;
+}
+
+.fmp-tile-label {
+    font-size: 11px;
+    opacity: 0.9;
+    text-align: center;
+    line-height: 1.1;
+}
+
+/* Selected (catégorie) */
+.fmp-tile.is-active {
+    border-color: var(--fmp-accent);
+    background: rgba(250, 204, 21, 0.10);
+    box-shadow: 0 0 0 3px var(--fmp-accentGlow);
+}
+
+/* Selected (symbole) variante bleue */
+.fmp-tile.is-active--blue {
+    border-color: rgba(37, 99, 235, 0.95);
+    background: rgba(37, 99, 235, 0.12);
+    box-shadow: 0 0 0 3px var(--fmp-primaryGlow);
+}
+
+/* Empty text */
+.fmp-empty {
+    font-size: 12px;
+    opacity: 0.75;
+    padding: 10px 12px;
+    border: 1px dashed rgba(255,255,255,0.18);
+    border-radius: 12px;
+    background: rgba(0,0,0,0.18);
+}
+
+/* Inputs */
+.fmp-field {
+    display: grid;
+    gap: 6px;
+    margin: 12px;
+}
+
+.fmp-label {
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+.fmp-input {
+
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: #000; /* ✅ fond noir */
+    color: #fff;      /* ✅ texte blanc */
+    padding: 12px 12px;
+    outline: none;
+    margin-bottom: 4px;
+}
+
+.fmp-input::placeholder {
+    color: rgba(255,255,255,0.55);
+}
+
+.fmp-input:focus {
+    border-color: rgba(37,99,235,0.9);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.22);
+}
+
+/* STEP 2 layout */
+.fmp-two-col {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 14px;
+    align-items: start;
+}
+
+@media (max-width: 620px) {
+    .fmp-two-col {
+        grid-template-columns: 1fr;
+    }
+}
+
+.fmp-preview {
+    display: grid;
+    justify-items: stretch;
+}
+
+.fmp-preview-card {
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.03);
+    border-radius: 14px;
+    min-height: 200px;
+    display: grid;
+    place-items: center;
+    padding: 14px;
+    gap: 10px;
+}
+
+.fmp-preview-glyph {
+    font-size: 64px;
+    line-height: 1;
+}
+
+.fmp-preview-name {
+    font-size: 12px;
+    opacity: 0.85;
+    text-align: center;
+}
+
+/* Type radio buttons */
+.fmp-type-row {
+    display: flex;
+    justify-content: space-around;   /* CENTRAGE horizontal */
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+.fmp-type-btn {
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.20);
+    color: white;
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 900;
+    transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.fmp-type-btn:hover {
+    border-color: rgba(255,255,255,0.22);
+}
+
+.fmp-type-btn.is-selected {
+    border-color: rgba(37,99,235,0.95);
+    background: rgba(37,99,235,0.12);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.22);
+}
+
+.fmp-type-glyph {
+    font-size: 18px;
+}
+
+/* Center actions (STEP 1 & STEP 2) */
+.fmp-actions-center {
+    display: flex;
+    justify-content: center; /* ✅ centré */
+    gap: 12px;              /* ✅ espacement uniforme */
+    margin-top: 6px;
+    padding-top: 6px;
+}
+
+/* Buttons */
+.fmp-btn {
+    border: none;
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-weight: 900;
+    cursor: pointer;
+    color: white;
+}
+
+.fmp-btn--primary {
+    background: var(--fmp-primary);
+    box-shadow: 0 10px 24px rgba(37,99,235,0.25);
+}
+
+.fmp-btn--ghost {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+}
+
+.fmp-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* La tuile elle-même : on centre le contenu + on coupe tout débordement */
+.fmp-step--1 .fmp-tile{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    overflow: hidden; /* IMPORTANT : coupe ce qui dépasse de la tuile */
+}
+
+/* Boîte icône FIXE (au lieu de width:100%) */
+.fmp-step--1 .fmp-tile .fmp-svg{
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    overflow: hidden; /* clip */
+}
+
+/* Le SVG doit remplir la boîte, sans dépasser */
+.fmp-step--1 .fmp-tile .fmp-svg svg{
+    width: 100%;
+    height: 100%;
+    display: block;
+
+    max-width: 100%;
+    max-height: 100%;
+
+    overflow: hidden; /* IMPORTANT : certains svg débordent sinon */
+}
+
+.fmp-tile--plus {
+    border-style: dashed;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.fmp-plus {
+    font-size: 34px;
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.9;
+}
+
+
+
